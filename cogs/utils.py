@@ -100,7 +100,7 @@ class Utils(commands.Cog):
     @app_commands.describe(suggestion="Η πρότασή σου")
     async def suggest(self, interaction: discord.Interaction, suggestion: str):
         await send_v2_interaction(interaction, [
-            panel(f"{E['check']} Η πρότασή σου στάλθηκε!", thumbnail_url=THUMBNAIL_URL, color=COLOR_GREEN)
+            simple(f"{E['check']} Η πρότασή σου στάλθηκε!", color=COLOR_GREEN)
         ], ephemeral=True)
         msg_data = await send_v2(interaction.channel, [
             panel(
