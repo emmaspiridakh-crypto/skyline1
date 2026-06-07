@@ -3,7 +3,6 @@ import discord
 TYPE_ACTION_ROW   = 1
 TYPE_BUTTON       = 2
 TYPE_SELECT       = 3
-TYPE_SECTION      = 9
 TYPE_TEXT_DISPLAY = 10
 TYPE_THUMBNAIL    = 11
 TYPE_SEPARATOR    = 14
@@ -58,7 +57,7 @@ def select_menu(custom_id: str, placeholder: str, options: list) -> dict:
     return {
         "type": TYPE_ACTION_ROW,
         "components": [{
-            "type": TYPE_SELECT,
+            "type": 3,
             "custom_id": custom_id,
             "placeholder": placeholder,
             "options": options
@@ -75,36 +74,49 @@ def select_option(label: str, value: str, description: str = None, emoji: str = 
             opt["emoji"] = {"name": parts[1], "id": parts[2], "animated": parts[0] == "a"}
     return opt
 
-def _make_section(text_content: str, thumbnail_url: str = None) -> dict:
-    s = {
-        "type": TYPE_SECTION,
-        "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
-    }
-    if thumbnail_url:
-        s["accessory"] = {
-            "type": TYPE_THUMBNAIL,
-            "media": {"url": thumbnail_url},
-            "description": "thumbnail"
-        }
-    return s
-
-def panel(text_content: str, thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
+def panel(text_content: str, thumbnail_url: str, color: int = COLOR_BLUE) -> dict:
+    """Panel με χρώμα + thumbnail. thumbnail_url ΠΑΝΤΑ υποχρεωτικό."""
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
-        "components": [_make_section(text_content, thumbnail_url)]
+        "components": [{
+            "type": 9,  # Section
+            "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}],
+            "accessory": {
+                "type": TYPE_THUMBNAIL,
+                "media": {"url": thumbnail_url},
+                "description": "thumbnail"
+            }
+        }]
     }
 
 def panel_with_buttons(text_content: str, buttons_row: dict,
-                       thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
+                       thumbnail_url: str, color: int = COLOR_BLUE) -> dict:
+    """Panel με χρώμα + thumbnail + buttons."""
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
         "components": [
-            _make_section(text_content, thumbnail_url),
+            {
+                "type": 9,
+                "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}],
+                "accessory": {
+                    "type": TYPE_THUMBNAIL,
+                    "media": {"url": thumbnail_url},
+                    "description": "thumbnail"
+                }
+            },
             {"type": TYPE_SEPARATOR, "spacing": 1, "divider": True},
             buttons_row
         ]
+    }
+
+def simple(text_content: str, color: int = COLOR_BLUE) -> dict:
+    """Απλό container με χρώμα χωρίς thumbnail — για ephemeral."""
+    return {
+        "type": TYPE_CONTAINER,
+        "accent_color": color,
+        "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
     }
 
 
