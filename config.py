@@ -15,10 +15,9 @@ ROLES = {
 }
 
 SELLERS = [
-    {"name": "Seller 1", "role_id": 1509180869942968531},
-    {"name": "Seller 2", "role_id": 1263445083622215741},
-    {"name": "Seller 3", "role_id": 999583544730996746},
-    {"name": "Seller 4", "role_id": 1335693650755063818},
+    {"name": "DarkAngel", "role_id": 999583544730996746},
+    {"name": "Panos", "role_id": 1263445083622215741},
+    {"name": "Skyline Prodacts", "role_id": 1509180869942968531},
 ]
 
 CHANNELS = {
