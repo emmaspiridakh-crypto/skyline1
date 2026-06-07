@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import datetime
-from config import CHANNELS, EMOJIS, THUMBNAIL_URL, is_staff
+from config import ROLES, CHANNELS, EMOJIS, BANNER_URL, SELLERS, is_staff, has_roles
 from v2 import *
 
 E = EMOJIS
@@ -10,83 +10,349 @@ E = EMOJIS
 def ts():
     return int(datetime.datetime.now().timestamp())
 
-async def punishment_log(guild, action, target, moderator, reason, duration=None):
-    ch = guild.get_channel(CHANNELS["punishments_logs"])
+STAFF_IDS = ["ceo", "owner", "co_owner", "manager", "staff", "administrator"]
+
+def can_control(member):
+    return has_roles(member, STAFF_IDS)
+
+
+# ════════════════════════════════════════════════════════════
+#                     TICKET LOG
+# ════════════════════════════════════════════════════════════
+
+async def ticket_log(guild, user, channel, ttype, action, closed_by=None):
+    ch = guild.get_channel(CHANNELS["ticket_logs"])
     if not ch:
         return
-    emap = {"Ban": E["ban"], "Unban": E["unban"], "Kick": E["kick"],
-            "Timeout": E["timeout"], "Clear": E["clear"]}
-    e = emap.get(action, E["punishment"])
+    emoji = E["check"] if action == "opened" else E["close"]
     txt = (
-        f"## {e} {action}\n"
-        f"{E['ticket']} Χρήστης: {target.mention if hasattr(target,'mention') else str(target)}\n"
-        f"{E['crown']} Moderator: {moderator.mention}\n"
-        f"{E['log']} Λόγος: **{reason}**\n"
+        f"## {emoji} Ticket {action.capitalize()}\n"
+        f"{E['ticket']} Channel: #{channel.name}\n"
+        f"{E['support']} Τύπος: **{ttype.capitalize()}**\n"
+        f"{E['log']} Χρήστης: {user.mention if user else 'Unknown'}\n"
     )
-    if duration:
-        txt += f"{E['timeout']} Διάρκεια: **{duration}**\n"
+    if closed_by:
+        txt += f"{E['close']} Έκλεισε από: {closed_by.mention}\n"
     txt += f"{E['loading']} Ώρα: <t:{ts()}:F>"
-    await send_v2(ch, [section(txt, thumbnail_url=THUMBNAIL_URL)])
+    await send_v2(ch, [text(txt)])
 
 
-class Moderation(commands.Cog):
+# ════════════════════════════════════════════════════════════
+#                     OPEN TICKET HELPER
+# ════════════════════════════════════════════════════════════
+
+async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text):
+    guild = interaction.guild
+    user  = interaction.user
+
+    for ch in guild.channels:
+        if ch.name == f"{name_prefix}-{user.name.lower()}":
+            await send_v2_interaction(interaction, [
+                text(f"{E['error']} Έχεις ήδη ανοιχτό ticket: <#{ch.id}>")
+            ], ephemeral=True)
+            return
+
+    category = guild.get_channel(CHANNELS["ticket_category"])
+    ow = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+    }
+    for rid in extra_roles:
+        r = guild.get_role(rid)
+        if r:
+            ow[r] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+    channel = await guild.create_text_channel(
+        name=f"{name_prefix}-{user.name.lower()}",
+        category=category,
+        overwrites=ow,
+        topic=f"{ttype} ticket | user:{user.id}"
+    )
+
+    await send_v2_interaction(interaction, [
+        text(f"{E['check']} Ticket ανοίχτηκε: <#{channel.id}>")
+    ], ephemeral=True)
+
+    # Panel inside ticket
+    await send_v2(channel, [
+        banner_container(BANNER_URL),
+        separator(),
+        text(ticket_text),
+        separator(large=True),
+        action_row(
+            button("Close Ticket",  custom_id=f"close_{channel.id}",  style=BUTTON_DANGER,    emoji=E["close"]),
+            button("Notify User",   custom_id=f"notify_{channel.id}", style=BUTTON_SECONDARY, emoji=E["notify"]),
+        )
+    ], content=user.mention)
+
+    await ticket_log(guild, user, channel, ttype, "opened")
+
+    # Notify staff channel
+    notify_ch = guild.get_channel(CHANNELS["staff_notify"])
+    if notify_ch:
+        staff_r   = guild.get_role(ROLES["staff"])
+        manager_r = guild.get_role(ROLES["manager"])
+        ping = f"{staff_r.mention} {manager_r.mention}" if staff_r and manager_r else ""
+        await send_v2(notify_ch, [
+            text(
+                f"{E['notify']} **Νέο {ttype.capitalize()} Ticket!**\n"
+                f"Χρήστης: {user.mention}\n"
+                f"Channel: <#{channel.id}>"
+            )
+        ], content=ping)
+
+
+# ════════════════════════════════════════════════════════════
+#                          COG
+# ════════════════════════════════════════════════════════════
+
+class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="ban", description="Ban χρήστη")
-    @app_commands.describe(user="Ο χρήστης", reason="Λόγος (υποχρεωτικό)")
-    async def ban(self, interaction: discord.Interaction, user: discord.Member, reason: str):
-        if not is_staff(interaction.user):
+    # ── SETUP SUPPORT PANEL ──────────────────────────────────
+    @app_commands.command(name="setup_tickets", description="Στέλνει το support ticket panel")
+    async def setup_tickets(self, interaction: discord.Interaction):
+        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
             await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
             return
-        await user.ban(reason=reason)
-        await send_v2_interaction(interaction, [text(f"{E['ban']} **{user}** έγινε ban.\n{E['log']} Λόγος: {reason}")])
-        await punishment_log(interaction.guild, "Ban", user, interaction.user, reason)
+        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
+        await send_v2(interaction.channel, [
+            banner_container(BANNER_URL),
+            separator(),
+            text(
+                f"## {E['support']} Support Tickets\n"
+                f"Επέλεξε κατηγορία παρακάτω.\n\n"
+                f"{E['ticket']} **Administrator** — Θέματα με administrators\n"
+                f"{E['support']} **Staff** — Γενική υποστήριξη\n"
+                f"{E['crown']} **Managers** — Θέματα με managers"
+            ),
+            separator(large=True),
+            action_row(
+                button("Administrator", custom_id="open_ticket_admin",   style=BUTTON_DANGER,   emoji=E["ticket"]),
+                button("Staff",         custom_id="open_ticket_staff",   style=BUTTON_PRIMARY,  emoji=E["support"]),
+                button("Managers",      custom_id="open_ticket_manager", style=BUTTON_SECONDARY,emoji=E["crown"]),
+            )
+        ])
 
-    @app_commands.command(name="unban", description="Unban χρήστη με ID")
-    @app_commands.describe(user_id="ID χρήστη", reason="Λόγος (υποχρεωτικό)")
-    async def unban(self, interaction: discord.Interaction, user_id: str, reason: str):
-        if not is_staff(interaction.user):
+    # ── SETUP BUY PANEL ──────────────────────────────────────
+    @app_commands.command(name="setup_buy", description="Στέλνει το buy ticket panel")
+    async def setup_buy(self, interaction: discord.Interaction):
+        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
             await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
             return
-        try:
-            user = await self.bot.fetch_user(int(user_id))
-            await interaction.guild.unban(user, reason=reason)
-            await send_v2_interaction(interaction, [text(f"{E['unban']} **{user}** έγινε unban.\n{E['log']} Λόγος: {reason}")])
-            await punishment_log(interaction.guild, "Unban", user, interaction.user, reason)
-        except:
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν βρέθηκε χρήστης.")], ephemeral=True)
+        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
+        options = [select_option(s["name"], str(i)) for i, s in enumerate(SELLERS)]
+        seller_list = "\n".join([f"{E['buy']} **{s['name']}**" for s in SELLERS])
+        await send_v2(interaction.channel, [
+            banner_container(BANNER_URL),
+            separator(),
+            text(
+                f"## {E['buy']} Buy Ticket\n"
+                f"Επέλεξε seller από το dropdown.\n\n"
+                f"**Διαθέσιμοι Sellers:**\n{seller_list}"
+            ),
+            separator(large=True),
+            select_menu("buy_seller_select", f"{E['buy']} Επέλεξε seller...", options)
+        ])
 
-    @app_commands.command(name="kick", description="Kick χρήστη")
-    @app_commands.describe(user="Ο χρήστης", reason="Λόγος (υποχρεωτικό)")
-    async def kick(self, interaction: discord.Interaction, user: discord.Member, reason: str):
-        if not is_staff(interaction.user):
+    # ── SETUP DONATE PANEL ───────────────────────────────────
+    @app_commands.command(name="setup_donate", description="Στέλνει το donate panel")
+    async def setup_donate(self, interaction: discord.Interaction):
+        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
             await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
             return
-        await user.kick(reason=reason)
-        await send_v2_interaction(interaction, [text(f"{E['kick']} **{user}** έγινε kick.\n{E['log']} Λόγος: {reason}")])
-        await punishment_log(interaction.guild, "Kick", user, interaction.user, reason)
+        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
+        await send_v2(interaction.channel, [
+            banner_container(BANNER_URL),
+            separator(),
+            text(
+                f"## {E['donate']} Donate\n"
+                f"Θέλεις να υποστηρίξεις τον server μας;\n"
+                f"Πάτα το κουμπί και ένας donate manager θα σε εξυπηρετήσει!"
+            ),
+            separator(large=True),
+            action_row(
+                button("Make a Donate", custom_id="open_ticket_donate", style=BUTTON_SUCCESS, emoji=E["donate"])
+            )
+        ])
 
-    @app_commands.command(name="timeout", description="Timeout χρήστη")
-    @app_commands.describe(user="Ο χρήστης", minutes="Λεπτά", reason="Λόγος (υποχρεωτικό)")
-    async def timeout(self, interaction: discord.Interaction, user: discord.Member, minutes: int, reason: str):
-        if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
+    # ── INTERACTIONS ─────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.component:
             return
-        await user.timeout(datetime.timedelta(minutes=minutes), reason=reason)
-        await send_v2_interaction(interaction, [text(f"{E['timeout']} **{user}** timeout για **{minutes} λεπτά**.\n{E['log']} Λόγος: {reason}")])
-        await punishment_log(interaction.guild, "Timeout", user, interaction.user, reason, f"{minutes} λεπτά")
+        cid = interaction.data.get("custom_id", "")
+        guild = interaction.guild
+        user  = interaction.user
 
-    @app_commands.command(name="clear", description="Διαγραφή μηνυμάτων")
-    @app_commands.describe(amount="Πόσα (max 100)", reason="Λόγος (υποχρεωτικό)")
-    async def clear(self, interaction: discord.Interaction, amount: int, reason: str):
-        if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
-            return
-        deleted = await interaction.channel.purge(limit=min(amount, 100))
-        await send_v2_interaction(interaction, [text(f"{E['clear']} Διαγράφηκαν **{len(deleted)}** μηνύματα.\n{E['log']} Λόγος: {reason}")], ephemeral=True)
-        await punishment_log(interaction.guild, "Clear", interaction.channel, interaction.user, reason)
+        # ── Open support tickets ─────────────────────────────
+        if cid == "open_ticket_admin":
+            roles = [ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+            await open_ticket(interaction, "support", "administrator", roles,
+                f"## {E['support']} Support Ticket — Administrator\n"
+                f"{E['ticket']} Από: {user.mention}\n"
+                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
+                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+            )
+
+        elif cid == "open_ticket_staff":
+            roles = [ROLES["staff"], ROLES["manager"], ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+            await open_ticket(interaction, "support", "staff", roles,
+                f"## {E['support']} Support Ticket — Staff\n"
+                f"{E['ticket']} Από: {user.mention}\n"
+                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
+                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+            )
+
+        elif cid == "open_ticket_manager":
+            roles = [ROLES["manager"], ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+            await open_ticket(interaction, "support", "manager", roles,
+                f"## {E['support']} Support Ticket — Manager\n"
+                f"{E['ticket']} Από: {user.mention}\n"
+                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
+                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+            )
+
+        elif cid == "open_ticket_donate":
+            roles = [ROLES["donate_manager"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+            await open_ticket(interaction, "donate", "donate", roles,
+                f"## {E['donate']} Donate Ticket\n"
+                f"{E['ticket']} Από: {user.mention}\n"
+                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
+                f"Γεια σου {user.mention}! Ευχαριστούμε για το ενδιαφέρον σου!"
+            )
+
+        # ── Buy seller select ─────────────────────────────────
+        elif cid == "buy_seller_select":
+            idx = int(interaction.data["values"][0])
+            seller = SELLERS[idx]
+            seller_role = guild.get_role(seller["role_id"])
+            extra_roles = [seller["role_id"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+
+            for ch in guild.channels:
+                if ch.name == f"buy-{user.name.lower()}":
+                    await send_v2_interaction(interaction, [
+                        text(f"{E['error']} Έχεις ήδη ανοιχτό buy ticket: <#{ch.id}>")
+                    ], ephemeral=True)
+                    return
+
+            category = guild.get_channel(CHANNELS["ticket_category"])
+            ow = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            }
+            for rid in extra_roles:
+                r = guild.get_role(rid)
+                if r:
+                    ow[r] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+            channel = await guild.create_text_channel(
+                name=f"buy-{user.name.lower()}",
+                category=category,
+                overwrites=ow,
+                topic=f"buy ticket | user:{user.id} | seller:{seller['name']}"
+            )
+
+            await send_v2_interaction(interaction, [
+                text(f"{E['check']} Buy ticket ανοίχτηκε: <#{channel.id}>")
+            ], ephemeral=True)
+
+            await send_v2(channel, [
+                banner_container(BANNER_URL),
+                separator(),
+                text(
+                    f"## {E['buy']} Buy Ticket\n"
+                    f"{E['ticket']} Αγοραστής: {user.mention}\n"
+                    f"{E['crown']} Seller: **{seller['name']}** {seller_role.mention if seller_role else ''}\n"
+                    f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
+                    f"Γεια σου {user.mention}! Ο seller θα σε εξυπηρετήσει σύντομα."
+                ),
+                separator(large=True),
+                action_row(
+                    button("Close Ticket", custom_id=f"close_{channel.id}",  style=BUTTON_DANGER,    emoji=E["close"]),
+                    button("Notify User",  custom_id=f"notify_{channel.id}", style=BUTTON_SECONDARY, emoji=E["notify"]),
+                )
+            ], content=user.mention)
+
+            await ticket_log(guild, user, channel, "buy", "opened")
+
+            notify_ch = guild.get_channel(CHANNELS["staff_notify"])
+            if notify_ch and seller_role:
+                await send_v2(notify_ch, [
+                    text(
+                        f"{E['notify']} **Νέο Buy Ticket!**\n"
+                        f"Αγοραστής: {user.mention}\n"
+                        f"Seller: {seller_role.mention}\n"
+                        f"Channel: <#{channel.id}>"
+                    )
+                ], content=seller_role.mention)
+
+        # ── Close ticket ─────────────────────────────────────
+        elif cid.startswith("close_"):
+            if not can_control(user):
+                await send_v2_interaction(interaction, [
+                    text(f"{E['error']} Δεν έχεις δικαίωμα.")
+                ], ephemeral=True)
+                return
+
+            channel = interaction.channel
+            topic   = channel.topic or ""
+            opener_id = None
+            for part in topic.split("|"):
+                part = part.strip()
+                if part.startswith("user:"):
+                    try:
+                        opener_id = int(part.split(":")[1])
+                    except:
+                        pass
+
+            opener = guild.get_member(opener_id) if opener_id else None
+            await send_v2_interaction(interaction, [
+                text(f"{E['close']} Ticket κλείνει... Διαγράφεται σε 5 δευτερόλεπτα.")
+            ])
+            await ticket_log(guild, opener, channel, "ticket", "closed", closed_by=user)
+            import asyncio
+            await asyncio.sleep(5)
+            await channel.delete()
+
+        # ── Notify user ───────────────────────────────────────
+        elif cid.startswith("notify_"):
+            if not can_control(user):
+                await send_v2_interaction(interaction, [
+                    text(f"{E['error']} Δεν έχεις δικαίωμα.")
+                ], ephemeral=True)
+                return
+
+            channel = interaction.channel
+            topic   = channel.topic or ""
+            opener_id = None
+            for part in topic.split("|"):
+                part = part.strip()
+                if part.startswith("user:"):
+                    try:
+                        opener_id = int(part.split(":")[1])
+                    except:
+                        pass
+
+            opener = guild.get_member(opener_id) if opener_id else None
+            if opener:
+                await send_v2_dm(opener, [
+                    text(
+                        f"## {E['notify']} Ειδοποίηση Ticket\n"
+                        f"Η ομάδα του **{guild.name}** σε καλεί πίσω στο ticket σου!\n"
+                        f"Channel: <#{channel.id}>"
+                    )
+                ])
+                await send_v2_interaction(interaction, [
+                    text(f"{E['check']} Ο χρήστης ειδοποιήθηκε!")
+                ], ephemeral=True)
+            else:
+                await send_v2_interaction(interaction, [
+                    text(f"{E['error']} Δεν βρέθηκε ο χρήστης.")
+                ], ephemeral=True)
 
 
 async def setup(bot):
-    await bot.add_cog(Moderation(bot))
+    await bot.add_cog(Tickets(bot))
+
