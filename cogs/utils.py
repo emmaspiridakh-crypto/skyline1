@@ -15,7 +15,6 @@ class Utils(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ── !say ────────────────────────────────────────────────
     @commands.command(name="say")
     async def say(self, ctx, *, message: str):
         if not has_roles(ctx.author, ["owner", "co_owner", "ceo"]):
@@ -24,7 +23,6 @@ class Utils(commands.Cog):
         await ctx.message.delete()
         await ctx.send(message)
 
-    # ── !say2 ────────────────────────────────────────────────
     @commands.command(name="say2")
     async def say2(self, ctx, *, message: str):
         if not has_roles(ctx.author, ["owner", "co_owner", "ceo"]):
@@ -32,13 +30,13 @@ class Utils(commands.Cog):
             return
         await ctx.message.delete()
         await send_v2(ctx.channel, [
-            section(
+            panel(
                 f"{E['say']} {message}\n\n— {ctx.author.display_name}",
-                thumbnail_url=THUMBNAIL_URL
+                thumbnail_url=THUMBNAIL_URL,
+                color=COLOR_BLUE
             )
         ])
 
-    # ── !dmall ───────────────────────────────────────────────
     @commands.command(name="dmall")
     async def dmall(self, ctx, *, message: str):
         if not has_roles(ctx.author, ["ceo"]):
@@ -46,37 +44,36 @@ class Utils(commands.Cog):
             return
         await ctx.message.delete()
         success, failed = 0, 0
-
         status = await ctx.send("⏳ Αποστολή DM...")
         for member in ctx.guild.members:
             if member.bot:
                 continue
             try:
                 await send_v2_dm(member, [
-                    section(
+                    panel(
                         f"## {E['dm']} Μήνυμα από **{ctx.guild.name}**\n\n"
                         f"{message}\n\n— {ctx.author.display_name}",
-                        thumbnail_url=THUMBNAIL_URL
+                        thumbnail_url=THUMBNAIL_URL,
+                        color=COLOR_BLUE
                     )
                 ])
                 success += 1
                 await asyncio.sleep(1)
             except:
                 failed += 1
-
         await status.edit(content=f"{E['check']} Επιτυχής: **{success}** | {E['error']} Αποτυχία: **{failed}**")
-
         log_ch = ctx.guild.get_channel(CHANNELS["bot_logs"])
         if log_ch:
-            await send_v2(log_ch, [text(
+            await send_v2(log_ch, [panel(
                 f"## {E['dm']} DM All\n"
                 f"{E['crown']} Από: {ctx.author.mention}\n"
                 f"{E['check']} Επιτυχής: **{success}**\n"
                 f"{E['error']} Αποτυχία: **{failed}**\n"
-                f"{E['loading']} Ώρα: <t:{ts()}:F>"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>",
+                thumbnail_url=THUMBNAIL_URL,
+                color=COLOR_BLUE
             )])
 
-    # ── !addemoji ────────────────────────────────────────────
     @commands.command(name="addemoji")
     async def addemoji(self, ctx, name: str, url: str):
         if not is_staff(ctx.author):
@@ -88,41 +85,39 @@ class Utils(commands.Cog):
                 async with session.get(url) as resp:
                     img = await resp.read()
             emoji = await ctx.guild.create_custom_emoji(name=name, image=img)
-            await send_v2(ctx.channel, [text(
+            await send_v2(ctx.channel, [panel(
                 f"## {E['emoji_add']} Emoji Προστέθηκε\n"
                 f"Όνομα: **:{name}:**\n"
                 f"Emoji: {emoji}\n"
-                f"Animated: **{'Ναι' if emoji.animated else 'Όχι'}**"
+                f"Animated: **{'Ναι' if emoji.animated else 'Όχι'}**",
+                thumbnail_url=THUMBNAIL_URL,
+                color=COLOR_GREEN
             )])
         except Exception as ex:
             await ctx.send(f"{E['error']} Σφάλμα: `{ex}`")
 
-    # ── /suggest ─────────────────────────────────────────────
     @app_commands.command(name="suggest", description="Κάνε μια πρόταση")
     @app_commands.describe(suggestion="Η πρότασή σου")
     async def suggest(self, interaction: discord.Interaction, suggestion: str):
         await send_v2_interaction(interaction, [
-            text(f"{E['check']} Η πρότασή σου στάλθηκε!")
+            panel(f"{E['check']} Η πρότασή σου στάλθηκε!", thumbnail_url=THUMBNAIL_URL, color=COLOR_GREEN)
         ], ephemeral=True)
-
         msg_data = await send_v2(interaction.channel, [
-            section(
+            panel(
                 f"## {E['suggestion']} Νέα Πρόταση\n"
                 f"{E['ticket']} Από: {interaction.user.mention}\n"
                 f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
                 f"**Πρόταση:**\n{suggestion}",
-                thumbnail_url=THUMBNAIL_URL
+                thumbnail_url=THUMBNAIL_URL,
+                color=COLOR_BLUE
             )
         ])
-
-        # Add reactions via REST
-        channel = interaction.channel
-        msg_id  = msg_data["id"]
-        route_up   = discord.http.Route("PUT", "/channels/{cid}/messages/{mid}/reactions/{emoji}/@me",
-                                        cid=channel.id, mid=msg_id, emoji="👍")
-        route_down = discord.http.Route("PUT", "/channels/{cid}/messages/{mid}/reactions/{emoji}/@me",
-                                        cid=channel.id, mid=msg_id, emoji="👎")
         try:
+            msg_id     = msg_data["id"]
+            route_up   = discord.http.Route("PUT", "/channels/{cid}/messages/{mid}/reactions/{emoji}/@me",
+                                            cid=interaction.channel.id, mid=msg_id, emoji="👍")
+            route_down = discord.http.Route("PUT", "/channels/{cid}/messages/{mid}/reactions/{emoji}/@me",
+                                            cid=interaction.channel.id, mid=msg_id, emoji="👎")
             await interaction._state.http.request(route_up)
             await asyncio.sleep(0.5)
             await interaction._state.http.request(route_down)
