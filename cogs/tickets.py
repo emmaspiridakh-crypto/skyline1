@@ -39,7 +39,7 @@ async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text)
     for ch in guild.channels:
         if ch.name == f"{name_prefix}-{user.name.lower()}":
             await send_v2_interaction(interaction, [
-                panel(f"{E['error']} Έχεις ήδη ανοιχτό ticket: <#{ch.id}>", color=COLOR_RED)
+                simple(f"{E['error']} Έχεις ήδη ανοιχτό ticket: <#{ch.id}>", color=COLOR_RED)
             ], ephemeral=True)
             return
 
@@ -61,7 +61,7 @@ async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text)
     )
 
     await send_v2_interaction(interaction, [
-        panel(f"{E['check']} Ticket ανοίχτηκε: <#{channel.id}>", color=COLOR_GREEN)
+        simple(f"{E['check']} Ticket ανοίχτηκε: <#{channel.id}>", color=COLOR_GREEN)
     ], ephemeral=True)
 
     await send_v2(channel, [
@@ -99,9 +99,9 @@ class Tickets(commands.Cog):
     @app_commands.command(name="setup_tickets", description="Στέλνει το support ticket panel")
     async def setup_tickets(self, interaction: discord.Interaction):
         if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await send_v2(interaction.channel, [
             panel_with_buttons(
                 f"## {E['support']} Support Tickets\n"
@@ -122,9 +122,9 @@ class Tickets(commands.Cog):
     @app_commands.command(name="setup_buy", description="Στέλνει το buy ticket panel")
     async def setup_buy(self, interaction: discord.Interaction):
         if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         options     = [select_option(s["name"], str(i)) for i, s in enumerate(SELLERS)]
         seller_list = "\n".join([f"{E['buy']} **{s['name']}**" for s in SELLERS])
         await send_v2(interaction.channel, [
@@ -141,9 +141,9 @@ class Tickets(commands.Cog):
     @app_commands.command(name="setup_donate", description="Στέλνει το donate panel")
     async def setup_donate(self, interaction: discord.Interaction):
         if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await send_v2(interaction.channel, [
             panel_with_buttons(
                 f"## {E['donate']} Donate\n"
@@ -210,7 +210,7 @@ class Tickets(commands.Cog):
             for ch in guild.channels:
                 if ch.name == f"buy-{user.name.lower()}":
                     await send_v2_interaction(interaction, [
-                        panel(f"{E['error']} Έχεις ήδη ανοιχτό buy ticket: <#{ch.id}>", color=COLOR_RED)
+                        simple(f"{E['error']} Έχεις ήδη ανοιχτό buy ticket: <#{ch.id}>", color=COLOR_RED)
                     ], ephemeral=True)
                     return
 
@@ -232,7 +232,7 @@ class Tickets(commands.Cog):
             )
 
             await send_v2_interaction(interaction, [
-                panel(f"{E['check']} Buy ticket ανοίχτηκε: <#{channel.id}>", color=COLOR_GREEN)
+                simple(f"{E['check']} Buy ticket ανοίχτηκε: <#{channel.id}>", color=COLOR_GREEN)
             ], ephemeral=True)
 
             await send_v2(channel, [
@@ -267,7 +267,7 @@ class Tickets(commands.Cog):
         elif cid.startswith("close_"):
             if not can_control(user):
                 await send_v2_interaction(interaction, [
-                    panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)
+                    simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)
                 ], ephemeral=True)
                 return
 
@@ -284,7 +284,7 @@ class Tickets(commands.Cog):
 
             opener = guild.get_member(opener_id) if opener_id else None
             await send_v2_interaction(interaction, [
-                panel(f"{E['close']} Ticket κλείνει... Διαγράφεται σε 5 δευτερόλεπτα.", color=COLOR_RED)
+                simple(f"{E['close']} Ticket κλείνει... Διαγράφεται σε 5 δευτερόλεπτα.", color=COLOR_RED)
             ])
             await ticket_log(guild, opener, channel, "ticket", "closed", closed_by=user)
             import asyncio
@@ -294,7 +294,7 @@ class Tickets(commands.Cog):
         elif cid.startswith("notify_"):
             if not can_control(user):
                 await send_v2_interaction(interaction, [
-                    panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)
+                    simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)
                 ], ephemeral=True)
                 return
 
@@ -319,11 +319,11 @@ class Tickets(commands.Cog):
                     color=COLOR_BLUE
                 )])
                 await send_v2_interaction(interaction, [
-                    panel(f"{E['check']} Ο χρήστης ειδοποιήθηκε!", color=COLOR_GREEN)
+                    simple(f"{E['check']} Ο χρήστης ειδοποιήθηκε!", color=COLOR_GREEN)
                 ], ephemeral=True)
             else:
                 await send_v2_interaction(interaction, [
-                    panel(f"{E['error']} Δεν βρέθηκε ο χρήστης.", color=COLOR_RED)
+                    simple(f"{E['error']} Δεν βρέθηκε ο χρήστης.", color=COLOR_RED)
                 ], ephemeral=True)
 
 
