@@ -1,8 +1,7 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 import datetime
-from config import ROLES, CHANNELS, EMOJIS, BANNER_URL, SELLERS, is_staff, has_roles
+from config import ROLES, CHANNELS, EMOJIS, THUMBNAIL_URL
 from v2 import *
 
 E = EMOJIS
@@ -10,348 +9,209 @@ E = EMOJIS
 def ts():
     return int(datetime.datetime.now().timestamp())
 
-STAFF_IDS = ["ceo", "owner", "co_owner", "manager", "staff", "administrator"]
-
-def can_control(member):
-    return has_roles(member, STAFF_IDS)
-
-
-# ════════════════════════════════════════════════════════════
-#                     TICKET LOG
-# ════════════════════════════════════════════════════════════
-
-async def ticket_log(guild, user, channel, ttype, action, closed_by=None):
-    ch = guild.get_channel(CHANNELS["ticket_logs"])
+async def log(guild, key, txt, thumb=True):
+    ch = guild.get_channel(CHANNELS.get(key))
     if not ch:
         return
-    emoji = E["check"] if action == "opened" else E["close"]
-    txt = (
-        f"## {emoji} Ticket {action.capitalize()}\n"
-        f"{E['ticket']} Channel: #{channel.name}\n"
-        f"{E['support']} Τύπος: **{ttype.capitalize()}**\n"
-        f"{E['log']} Χρήστης: {user.mention if user else 'Unknown'}\n"
-    )
-    if closed_by:
-        txt += f"{E['close']} Έκλεισε από: {closed_by.mention}\n"
-    txt += f"{E['loading']} Ώρα: <t:{ts()}:F>"
-    await send_v2(ch, [text(txt)])
+    comp = [section(txt, thumbnail_url=THUMBNAIL_URL)] if thumb else [text(txt)]
+    await send_v2(ch, comp)
 
 
-# ════════════════════════════════════════════════════════════
-#                     OPEN TICKET HELPER
-# ════════════════════════════════════════════════════════════
-
-async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text):
-    guild = interaction.guild
-    user  = interaction.user
-
-    for ch in guild.channels:
-        if ch.name == f"{name_prefix}-{user.name.lower()}":
-            await send_v2_interaction(interaction, [
-                text(f"{E['error']} Έχεις ήδη ανοιχτό ticket: <#{ch.id}>")
-            ], ephemeral=True)
-            return
-
-    category = guild.get_channel(CHANNELS["ticket_category"])
-    ow = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-    }
-    for rid in extra_roles:
-        r = guild.get_role(rid)
-        if r:
-            ow[r] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-    channel = await guild.create_text_channel(
-        name=f"{name_prefix}-{user.name.lower()}",
-        category=category,
-        overwrites=ow,
-        topic=f"{ttype} ticket | user:{user.id}"
-    )
-
-    await send_v2_interaction(interaction, [
-        text(f"{E['check']} Ticket ανοίχτηκε: <#{channel.id}>")
-    ], ephemeral=True)
-
-    # Panel inside ticket
-    await send_v2(channel, [
-        banner_container(BANNER_URL),
-        separator(),
-        text(ticket_text),
-        separator(large=True),
-        action_row(
-            button("Close Ticket",  custom_id=f"close_{channel.id}",  style=BUTTON_DANGER,    emoji=E["close"]),
-            button("Notify User",   custom_id=f"notify_{channel.id}", style=BUTTON_SECONDARY, emoji=E["notify"]),
-        )
-    ], content=user.mention)
-
-    await ticket_log(guild, user, channel, ttype, "opened")
-
-    # Notify staff channel
-    notify_ch = guild.get_channel(CHANNELS["staff_notify"])
-    if notify_ch:
-        staff_r   = guild.get_role(ROLES["staff"])
-        manager_r = guild.get_role(ROLES["manager"])
-        ping = f"{staff_r.mention} {manager_r.mention}" if staff_r and manager_r else ""
-        await send_v2(notify_ch, [
-            text(
-                f"{E['notify']} **Νέο {ttype.capitalize()} Ticket!**\n"
-                f"Χρήστης: {user.mention}\n"
-                f"Channel: <#{channel.id}>"
-            )
-        ], content=ping)
-
-
-# ════════════════════════════════════════════════════════════
-#                          COG
-# ════════════════════════════════════════════════════════════
-
-class Tickets(commands.Cog):
+class Logs(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ── SETUP SUPPORT PANEL ──────────────────────────────────
-    @app_commands.command(name="setup_tickets", description="Στέλνει το support ticket panel")
-    async def setup_tickets(self, interaction: discord.Interaction):
-        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
-            return
-        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
-        await send_v2(interaction.channel, [
-            banner_container(BANNER_URL),
-            separator(),
-            text(
-                f"## {E['support']} Support Tickets\n"
-                f"Επέλεξε κατηγορία παρακάτω.\n\n"
-                f"{E['ticket']} **Administrator** — Θέματα με administrators\n"
-                f"{E['support']} **Staff** — Γενική υποστήριξη\n"
-                f"{E['crown']} **Managers** — Θέματα με managers"
-            ),
-            separator(large=True),
-            action_row(
-                button("Administrator", custom_id="open_ticket_admin",   style=BUTTON_DANGER,   emoji=E["ticket"]),
-                button("Staff",         custom_id="open_ticket_staff",   style=BUTTON_PRIMARY,  emoji=E["support"]),
-                button("Managers",      custom_id="open_ticket_manager", style=BUTTON_SECONDARY,emoji=E["crown"]),
-            )
-        ])
-
-    # ── SETUP BUY PANEL ──────────────────────────────────────
-    @app_commands.command(name="setup_buy", description="Στέλνει το buy ticket panel")
-    async def setup_buy(self, interaction: discord.Interaction):
-        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
-            return
-        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
-        options = [select_option(s["name"], str(i)) for i, s in enumerate(SELLERS)]
-        seller_list = "\n".join([f"{E['buy']} **{s['name']}**" for s in SELLERS])
-        await send_v2(interaction.channel, [
-            banner_container(BANNER_URL),
-            separator(),
-            text(
-                f"## {E['buy']} Buy Ticket\n"
-                f"Επέλεξε seller από το dropdown.\n\n"
-                f"**Διαθέσιμοι Sellers:**\n{seller_list}"
-            ),
-            separator(large=True),
-            select_menu("buy_seller_select", f"{E['buy']} Επέλεξε seller...", options)
-        ])
-
-    # ── SETUP DONATE PANEL ───────────────────────────────────
-    @app_commands.command(name="setup_donate", description="Στέλνει το donate panel")
-    async def setup_donate(self, interaction: discord.Interaction):
-        if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
-            return
-        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
-        await send_v2(interaction.channel, [
-            banner_container(BANNER_URL),
-            separator(),
-            text(
-                f"## {E['donate']} Donate\n"
-                f"Θέλεις να υποστηρίξεις τον server μας;\n"
-                f"Πάτα το κουμπί και ένας donate manager θα σε εξυπηρετήσει!"
-            ),
-            separator(large=True),
-            action_row(
-                button("Make a Donate", custom_id="open_ticket_donate", style=BUTTON_SUCCESS, emoji=E["donate"])
-            )
-        ])
-
-    # ── INTERACTIONS ─────────────────────────────────────────
+    # ── WELCOME / LEAVE ─────────────────────────────────────
     @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        if interaction.type != discord.InteractionType.component:
+    async def on_member_join(self, member):
+        guild = member.guild
+
+        auto_role = guild.get_role(ROLES["auto_role"])
+        if auto_role:
+            try:
+                await member.add_roles(auto_role)
+            except:
+                pass
+
+        created = int(member.created_at.timestamp())
+        await log(guild, "welcome_logs",
+            f"## {E['join']} Νέο Μέλος\n"
+            f"{E['welcome']} Χρήστης: {member.mention} ({member})\n"
+            f"{E['log']} Δημιουργία λογαριασμού: <t:{created}:F>\n"
+            f"{E['loading']} Μπήκε: <t:{ts()}:F>\n"
+            f"{E['ticket']} Μέλη: **{guild.member_count}**"
+        )
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        guild = member.guild
+        joined = int(member.joined_at.timestamp()) if member.joined_at else ts()
+        await log(guild, "welcome_logs",
+            f"## {E['leave']} Έφυγε Μέλος\n"
+            f"{E['welcome']} Χρήστης: **{member}**\n"
+            f"{E['log']} Μπήκε: <t:{joined}:R>\n"
+            f"{E['loading']} Έφυγε: <t:{ts()}:F>\n"
+            f"{E['ticket']} Μέλη: **{guild.member_count}**"
+        )
+
+    # ── MESSAGE LOGS ────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_message_delete(self, message):
+        if message.author.bot or not message.guild:
             return
-        cid = interaction.data.get("custom_id", "")
-        guild = interaction.guild
-        user  = interaction.user
+        content = message.content[:500] if message.content else "Χωρίς κείμενο"
+        await log(message.guild, "message_logs",
+            f"## {E['delete']} Μήνυμα Διαγράφηκε\n"
+            f"{E['ticket']} Χρήστης: {message.author.mention}\n"
+            f"{E['log']} Channel: <#{message.channel.id}>\n"
+            f"{E['edit']} Περιεχόμενο:\n```\n{content}\n```\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
 
-        # ── Open support tickets ─────────────────────────────
-        if cid == "open_ticket_admin":
-            roles = [ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
-            await open_ticket(interaction, "support", "administrator", roles,
-                f"## {E['support']} Support Ticket — Administrator\n"
-                f"{E['ticket']} Από: {user.mention}\n"
-                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
-                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+    @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        if before.author.bot or not before.guild or before.content == after.content:
+            return
+        await log(before.guild, "message_logs",
+            f"## {E['edit']} Μήνυμα Επεξεργάστηκε\n"
+            f"{E['ticket']} Χρήστης: {before.author.mention}\n"
+            f"{E['log']} Channel: <#{before.channel.id}>\n"
+            f"{E['delete']} Πριν:\n```\n{before.content[:300]}\n```\n"
+            f"{E['edit']} Μετά:\n```\n{after.content[:300]}\n```\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
+
+    # ── VOICE LOGS ──────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        guild = member.guild
+        if before.channel is None and after.channel is not None:
+            await log(guild, "voice_logs",
+                f"## {E['voice_join']} Voice Join\n"
+                f"{E['ticket']} Χρήστης: {member.mention}\n"
+                f"{E['voice']} Channel: **{after.channel.name}**\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
+            )
+        elif before.channel is not None and after.channel is None:
+            await log(guild, "voice_logs",
+                f"## {E['voice_leave']} Voice Leave\n"
+                f"{E['ticket']} Χρήστης: {member.mention}\n"
+                f"{E['voice']} Channel: **{before.channel.name}**\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
+            )
+        elif before.channel and after.channel and before.channel != after.channel:
+            await log(guild, "voice_logs",
+                f"## {E['voice']} Voice Switch\n"
+                f"{E['ticket']} Χρήστης: {member.mention}\n"
+                f"{E['voice_leave']} Από: **{before.channel.name}**\n"
+                f"{E['voice_join']} Σε: **{after.channel.name}**\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
             )
 
-        elif cid == "open_ticket_staff":
-            roles = [ROLES["staff"], ROLES["manager"], ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
-            await open_ticket(interaction, "support", "staff", roles,
-                f"## {E['support']} Support Ticket — Staff\n"
-                f"{E['ticket']} Από: {user.mention}\n"
-                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
-                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+    # ── ROLE LOGS ───────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        added   = [r for r in after.roles if r not in before.roles]
+        removed = [r for r in before.roles if r not in after.roles]
+        for role in added:
+            await log(after.guild, "role_logs",
+                f"## {E['role_add']} Role Προστέθηκε\n"
+                f"{E['ticket']} Χρήστης: {after.mention}\n"
+                f"{E['crown']} Role: {role.mention}\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
+            )
+        for role in removed:
+            await log(after.guild, "role_logs",
+                f"## {E['role_remove']} Role Αφαιρέθηκε\n"
+                f"{E['ticket']} Χρήστης: {after.mention}\n"
+                f"{E['crown']} Role: {role.mention}\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
+            )
+        # boost check
+        if before.premium_since is None and after.premium_since is not None:
+            await log(after.guild, "other_logs",
+                f"## {E['boost']} Νέο Server Boost!\n"
+                f"{E['crown']} Χρήστης: {after.mention}\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
             )
 
-        elif cid == "open_ticket_manager":
-            roles = [ROLES["manager"], ROLES["administrator"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
-            await open_ticket(interaction, "support", "manager", roles,
-                f"## {E['support']} Support Ticket — Manager\n"
-                f"{E['ticket']} Από: {user.mention}\n"
-                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
-                f"Γεια σου {user.mention}! Περίμενε να σε εξυπηρετήσουμε."
+    # ── CHANNEL LOGS ────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel):
+        await log(channel.guild, "channel_logs",
+            f"## {E['channel_add']} Channel Δημιουργήθηκε\n"
+            f"{E['ticket']} Όνομα: **{channel.name}**\n"
+            f"{E['log']} Τύπος: **{str(channel.type).capitalize()}**\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel):
+        await log(channel.guild, "channel_logs",
+            f"## {E['channel_del']} Channel Διαγράφηκε\n"
+            f"{E['ticket']} Όνομα: **{channel.name}**\n"
+            f"{E['log']} Τύπος: **{str(channel.type).capitalize()}**\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before, after):
+        if before.name != after.name:
+            await log(after.guild, "channel_logs",
+                f"## {E['edit']} Channel Μετονομάστηκε\n"
+                f"{E['delete']} Πριν: **{before.name}**\n"
+                f"{E['edit']} Μετά: **{after.name}**\n"
+                f"{E['loading']} Ώρα: <t:{ts()}:F>"
             )
 
-        elif cid == "open_ticket_donate":
-            roles = [ROLES["donate_manager"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
-            await open_ticket(interaction, "donate", "donate", roles,
-                f"## {E['donate']} Donate Ticket\n"
-                f"{E['ticket']} Από: {user.mention}\n"
-                f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
-                f"Γεια σου {user.mention}! Ευχαριστούμε για το ενδιαφέρον σου!"
-            )
+    # ── REACTION LOGS ───────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        if user.bot or not reaction.message.guild:
+            return
+        await log(reaction.message.guild, "reaction_logs",
+            f"## {E['reaction']} Reaction Προστέθηκε\n"
+            f"{E['ticket']} Χρήστης: {user.mention}\n"
+            f"{E['reaction']} Emoji: {reaction.emoji}\n"
+            f"{E['log']} Channel: <#{reaction.message.channel.id}>\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
 
-        # ── Buy seller select ─────────────────────────────────
-        elif cid == "buy_seller_select":
-            idx = int(interaction.data["values"][0])
-            seller = SELLERS[idx]
-            seller_role = guild.get_role(seller["role_id"])
-            extra_roles = [seller["role_id"], ROLES["ceo"], ROLES["owner"], ROLES["co_owner"]]
+    @commands.Cog.listener()
+    async def on_reaction_remove(self, reaction, user):
+        if user.bot or not reaction.message.guild:
+            return
+        await log(reaction.message.guild, "reaction_logs",
+            f"## {E['reaction']} Reaction Αφαιρέθηκε\n"
+            f"{E['ticket']} Χρήστης: {user.mention}\n"
+            f"{E['reaction']} Emoji: {reaction.emoji}\n"
+            f"{E['log']} Channel: <#{reaction.message.channel.id}>\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
 
-            for ch in guild.channels:
-                if ch.name == f"buy-{user.name.lower()}":
-                    await send_v2_interaction(interaction, [
-                        text(f"{E['error']} Έχεις ήδη ανοιχτό buy ticket: <#{ch.id}>")
-                    ], ephemeral=True)
-                    return
+    # ── INVITE LOGS ─────────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_invite_create(self, invite):
+        await log(invite.guild, "invite_logs",
+            f"## {E['invite']} Invite Δημιουργήθηκε\n"
+            f"{E['ticket']} Από: {invite.inviter.mention if invite.inviter else 'Unknown'}\n"
+            f"{E['log']} Code: **{invite.code}**\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
 
-            category = guild.get_channel(CHANNELS["ticket_category"])
-            ow = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            }
-            for rid in extra_roles:
-                r = guild.get_role(rid)
-                if r:
-                    ow[r] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
-
-            channel = await guild.create_text_channel(
-                name=f"buy-{user.name.lower()}",
-                category=category,
-                overwrites=ow,
-                topic=f"buy ticket | user:{user.id} | seller:{seller['name']}"
-            )
-
-            await send_v2_interaction(interaction, [
-                text(f"{E['check']} Buy ticket ανοίχτηκε: <#{channel.id}>")
-            ], ephemeral=True)
-
-            await send_v2(channel, [
-                banner_container(BANNER_URL),
-                separator(),
-                text(
-                    f"## {E['buy']} Buy Ticket\n"
-                    f"{E['ticket']} Αγοραστής: {user.mention}\n"
-                    f"{E['crown']} Seller: **{seller['name']}** {seller_role.mention if seller_role else ''}\n"
-                    f"{E['log']} Ώρα: <t:{ts()}:F>\n\n"
-                    f"Γεια σου {user.mention}! Ο seller θα σε εξυπηρετήσει σύντομα."
-                ),
-                separator(large=True),
-                action_row(
-                    button("Close Ticket", custom_id=f"close_{channel.id}",  style=BUTTON_DANGER,    emoji=E["close"]),
-                    button("Notify User",  custom_id=f"notify_{channel.id}", style=BUTTON_SECONDARY, emoji=E["notify"]),
-                )
-            ], content=user.mention)
-
-            await ticket_log(guild, user, channel, "buy", "opened")
-
-            notify_ch = guild.get_channel(CHANNELS["staff_notify"])
-            if notify_ch and seller_role:
-                await send_v2(notify_ch, [
-                    text(
-                        f"{E['notify']} **Νέο Buy Ticket!**\n"
-                        f"Αγοραστής: {user.mention}\n"
-                        f"Seller: {seller_role.mention}\n"
-                        f"Channel: <#{channel.id}>"
-                    )
-                ], content=seller_role.mention)
-
-        # ── Close ticket ─────────────────────────────────────
-        elif cid.startswith("close_"):
-            if not can_control(user):
-                await send_v2_interaction(interaction, [
-                    text(f"{E['error']} Δεν έχεις δικαίωμα.")
-                ], ephemeral=True)
-                return
-
-            channel = interaction.channel
-            topic   = channel.topic or ""
-            opener_id = None
-            for part in topic.split("|"):
-                part = part.strip()
-                if part.startswith("user:"):
-                    try:
-                        opener_id = int(part.split(":")[1])
-                    except:
-                        pass
-
-            opener = guild.get_member(opener_id) if opener_id else None
-            await send_v2_interaction(interaction, [
-                text(f"{E['close']} Ticket κλείνει... Διαγράφεται σε 5 δευτερόλεπτα.")
-            ])
-            await ticket_log(guild, opener, channel, "ticket", "closed", closed_by=user)
-            import asyncio
-            await asyncio.sleep(5)
-            await channel.delete()
-
-        # ── Notify user ───────────────────────────────────────
-        elif cid.startswith("notify_"):
-            if not can_control(user):
-                await send_v2_interaction(interaction, [
-                    text(f"{E['error']} Δεν έχεις δικαίωμα.")
-                ], ephemeral=True)
-                return
-
-            channel = interaction.channel
-            topic   = channel.topic or ""
-            opener_id = None
-            for part in topic.split("|"):
-                part = part.strip()
-                if part.startswith("user:"):
-                    try:
-                        opener_id = int(part.split(":")[1])
-                    except:
-                        pass
-
-            opener = guild.get_member(opener_id) if opener_id else None
-            if opener:
-                await send_v2_dm(opener, [
-                    text(
-                        f"## {E['notify']} Ειδοποίηση Ticket\n"
-                        f"Η ομάδα του **{guild.name}** σε καλεί πίσω στο ticket σου!\n"
-                        f"Channel: <#{channel.id}>"
-                    )
-                ])
-                await send_v2_interaction(interaction, [
-                    text(f"{E['check']} Ο χρήστης ειδοποιήθηκε!")
-                ], ephemeral=True)
-            else:
-                await send_v2_interaction(interaction, [
-                    text(f"{E['error']} Δεν βρέθηκε ο χρήστης.")
-                ], ephemeral=True)
+    # ── BOT COMMAND LOGS ────────────────────────────────────
+    @commands.Cog.listener()
+    async def on_app_command_completion(self, interaction, command):
+        if not interaction.guild:
+            return
+        await log(interaction.guild, "bot_logs",
+            f"## {E['log']} Εντολή Χρησιμοποιήθηκε\n"
+            f"{E['ticket']} Χρήστης: {interaction.user.mention}\n"
+            f"{E['edit']} Εντολή: **/{command.name}**\n"
+            f"{E['log']} Channel: <#{interaction.channel.id}>\n"
+            f"{E['loading']} Ώρα: <t:{ts()}:F>"
+        )
 
 
 async def setup(bot):
-    await bot.add_cog(Tickets(bot))
+    await bot.add_cog(Logs(bot))
