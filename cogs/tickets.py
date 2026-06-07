@@ -64,9 +64,10 @@ async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text)
         simple(f"{E['check']} Ticket ανοίχτηκε: <#{channel.id}>", color=COLOR_GREEN)
     ], ephemeral=True)
 
+    # Panel μέσα στο ticket — mention μέσα στο text
     await send_v2(channel, [
         panel_with_buttons(
-            ticket_text,
+            f"{user.mention}\n\n{ticket_text}",
             action_row(
                 button("Close Ticket", custom_id=f"close_{channel.id}",  style=BUTTON_DANGER,    emoji=E["close"]),
                 button("Notify User",  custom_id=f"notify_{channel.id}", style=BUTTON_SECONDARY, emoji=E["notify"]),
@@ -74,22 +75,31 @@ async def open_ticket(interaction, name_prefix, ttype, extra_roles, ticket_text)
             thumbnail_url=BANNER_URL,
             color=COLOR_BLUE
         )
-    ], content=user.mention)
+    ])
 
     await ticket_log(guild, user, channel, ttype, "opened")
 
+    # Notify staff
     notify_ch = guild.get_channel(CHANNELS["staff_notify"])
     if notify_ch:
         staff_r   = guild.get_role(ROLES["staff"])
         manager_r = guild.get_role(ROLES["manager"])
-        ping = f"{staff_r.mention} {manager_r.mention}" if staff_r and manager_r else ""
+        ping = ""
+        if staff_r:
+            ping += staff_r.mention + " "
+        if manager_r:
+            ping += manager_r.mention
+
+        # Στέλνουμε πρώτα το mention ως κανονικό μήνυμα, μετά το panel
+        if ping:
+            await notify_ch.send(ping)
         await send_v2(notify_ch, [panel(
-            f"{E['notify']} **Νέο {ttype.capitalize()} Ticket!**\n"
-            f"Χρήστης: {user.mention}\n"
-            f"Channel: <#{channel.id}>",
+            f"## {E['notify']} Νέο {ttype.capitalize()} Ticket!\n"
+            f"{E['ticket']} Χρήστης: {user.mention}\n"
+            f"{E['log']} Channel: <#{channel.id}>",
             thumbnail_url=THUMBNAIL_URL,
             color=COLOR_BLUE
-        )], content=ping)
+        )])
 
 
 class Tickets(commands.Cog):
@@ -237,6 +247,7 @@ class Tickets(commands.Cog):
 
             await send_v2(channel, [
                 panel_with_buttons(
+                    f"{user.mention}\n\n"
                     f"## {E['buy']} Buy Ticket\n"
                     f"{E['ticket']} Αγοραστής: {user.mention}\n"
                     f"{E['crown']} Seller: **{seller['name']}** {seller_role.mention if seller_role else ''}\n"
@@ -249,20 +260,21 @@ class Tickets(commands.Cog):
                     thumbnail_url=BANNER_URL,
                     color=COLOR_GOLD
                 )
-            ], content=user.mention)
+            ])
 
             await ticket_log(guild, user, channel, "buy", "opened")
 
             notify_ch = guild.get_channel(CHANNELS["staff_notify"])
             if notify_ch and seller_role:
+                await notify_ch.send(seller_role.mention)
                 await send_v2(notify_ch, [panel(
-                    f"{E['notify']} **Νέο Buy Ticket!**\n"
-                    f"Αγοραστής: {user.mention}\n"
-                    f"Seller: {seller_role.mention}\n"
-                    f"Channel: <#{channel.id}>",
+                    f"## {E['notify']} Νέο Buy Ticket!\n"
+                    f"{E['ticket']} Αγοραστής: {user.mention}\n"
+                    f"{E['crown']} Seller: {seller_role.mention}\n"
+                    f"{E['log']} Channel: <#{channel.id}>",
                     thumbnail_url=THUMBNAIL_URL,
                     color=COLOR_GOLD
-                )], content=seller_role.mention)
+                )])
 
         elif cid.startswith("close_"):
             if not can_control(user):
@@ -329,5 +341,3 @@ class Tickets(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Tickets(bot))
-
-
