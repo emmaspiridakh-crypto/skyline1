@@ -31,7 +31,7 @@ class Utils(commands.Cog):
         await ctx.message.delete()
         await send_v2(ctx.channel, [
             panel(
-                f"{E['say']} {message}\n\n— {ctx.author.display_name}",
+                f"{E['say']} {message}\n\n—",
                 thumbnail_url=THUMBNAIL_URL,
                 color=COLOR_BLUE
             )
@@ -52,7 +52,7 @@ class Utils(commands.Cog):
                 await send_v2_dm(member, [
                     panel(
                         f"## {E['dm']} Μήνυμα από **{ctx.guild.name}**\n\n"
-                        f"{message}\n\n— {ctx.author.display_name}",
+                        f"{message}\n\n",
                         thumbnail_url=THUMBNAIL_URL,
                         color=COLOR_BLUE
                     )
