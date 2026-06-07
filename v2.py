@@ -76,7 +76,6 @@ def select_option(label: str, value: str, description: str = None, emoji: str = 
     return opt
 
 def _make_section(text_content: str, thumbnail_url: str = None) -> dict:
-    """Internal section builder."""
     s = {
         "type": TYPE_SECTION,
         "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
@@ -85,22 +84,19 @@ def _make_section(text_content: str, thumbnail_url: str = None) -> dict:
         s["accessory"] = {
             "type": TYPE_THUMBNAIL,
             "media": {"url": thumbnail_url},
-            "description": ""
+            "description": "thumbnail"
         }
     return s
 
 def panel(text_content: str, thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
-    """Embed-style panel με χρωματιστή μπάρα + optional thumbnail."""
-    components = [_make_section(text_content, thumbnail_url)]
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
-        "components": components
+        "components": [_make_section(text_content, thumbnail_url)]
     }
 
 def panel_with_buttons(text_content: str, buttons_row: dict,
                        thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
-    """Panel με χρώμα + thumbnail + buttons μέσα στο container."""
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
@@ -111,8 +107,6 @@ def panel_with_buttons(text_content: str, buttons_row: dict,
         ]
     }
 
-
-# ── Send helpers ─────────────────────────────────────────────
 
 async def send_v2(channel, components: list, content: str = None):
     payload = {"flags": IS_COMPONENTS_V2, "components": components}
