@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 import datetime
-from config import ROLES, CHANNELS, EMOJIS
+from config import ROLES, CHANNELS, EMOJIS, THUMBNAIL_URL
 from v2 import *
 
 E = EMOJIS
@@ -17,14 +17,13 @@ class Voice(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        guild = member.guild
+        guild          = member.guild
         join_to_create = CHANNELS.get("join_to_create")
         voice_category = CHANNELS.get("voice_category")
 
-        # Create temp channel
         if after.channel and after.channel.id == join_to_create:
             category = guild.get_channel(voice_category)
-            new_ch = await guild.create_voice_channel(
+            new_ch   = await guild.create_voice_channel(
                 name=f"{E['voice']} {member.display_name}",
                 category=category,
                 user_limit=10
@@ -34,11 +33,13 @@ class Voice(commands.Cog):
 
             log_ch = guild.get_channel(CHANNELS["voice_logs"])
             if log_ch:
-                await send_v2(log_ch, [text(
+                await send_v2(log_ch, [panel(
                     f"## {E['voice_join']} Temp Voice Δημιουργήθηκε\n"
                     f"{E['ticket']} Από: {member.mention}\n"
                     f"{E['voice']} Channel: **{new_ch.name}**\n"
-                    f"{E['loading']} Ώρα: <t:{ts()}:F>"
+                    f"{E['loading']} Ώρα: <t:{ts()}:F>",
+                    thumbnail_url=THUMBNAIL_URL,
+                    color=COLOR_ORANGE
                 )])
 
             notify_ch = guild.get_channel(CHANNELS["staff_notify"])
@@ -46,12 +47,13 @@ class Voice(commands.Cog):
                 staff_r   = guild.get_role(ROLES["staff"])
                 manager_r = guild.get_role(ROLES["manager"])
                 ping = f"{staff_r.mention} {manager_r.mention}" if staff_r and manager_r else ""
-                await send_v2(notify_ch, [text(
+                await send_v2(notify_ch, [panel(
                     f"{E['voice']} **{member.mention}** μπήκε σε Support Voice!\n"
-                    f"Channel: **{new_ch.name}**"
+                    f"Channel: **{new_ch.name}**",
+                    thumbnail_url=THUMBNAIL_URL,
+                    color=COLOR_ORANGE
                 )], content=ping)
 
-        # Delete temp channel when empty
         if before.channel and before.channel.id in self.temp_channels:
             if len(before.channel.members) == 0:
                 ch_name = before.channel.name
@@ -60,13 +62,14 @@ class Voice(commands.Cog):
                     await before.channel.delete()
                 except:
                     pass
-
                 log_ch = guild.get_channel(CHANNELS["voice_logs"])
                 if log_ch:
-                    await send_v2(log_ch, [text(
+                    await send_v2(log_ch, [panel(
                         f"## {E['voice_leave']} Temp Voice Διαγράφηκε\n"
                         f"{E['voice']} Channel: **{ch_name}**\n"
-                        f"{E['loading']} Ώρα: <t:{ts()}:F>"
+                        f"{E['loading']} Ώρα: <t:{ts()}:F>",
+                        thumbnail_url=THUMBNAIL_URL,
+                        color=COLOR_ORANGE
                     )])
 
 
