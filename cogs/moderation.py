@@ -37,7 +37,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(user="Ο χρήστης", reason="Λόγος (υποχρεωτικό)")
     async def ban(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
         await user.ban(reason=reason)
         await send_v2_interaction(interaction, [panel(f"{E['ban']} **{user}** έγινε ban.\n{E['log']} Λόγος: {reason}", color=COLOR_RED)])
@@ -47,7 +47,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(user_id="ID χρήστη", reason="Λόγος (υποχρεωτικό)")
     async def unban(self, interaction: discord.Interaction, user_id: str, reason: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
         try:
             user = await self.bot.fetch_user(int(user_id))
@@ -61,7 +61,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(user="Ο χρήστης", reason="Λόγος (υποχρεωτικό)")
     async def kick(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
         await user.kick(reason=reason)
         await send_v2_interaction(interaction, [panel(f"{E['kick']} **{user}** έγινε kick.\n{E['log']} Λόγος: {reason}", color=COLOR_ORANGE)])
@@ -71,7 +71,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(user="Ο χρήστης", minutes="Λεπτά", reason="Λόγος (υποχρεωτικό)")
     async def timeout(self, interaction: discord.Interaction, user: discord.Member, minutes: int, reason: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
         await user.timeout(datetime.timedelta(minutes=minutes), reason=reason)
         await send_v2_interaction(interaction, [panel(f"{E['timeout']} **{user}** timeout για **{minutes} λεπτά**.\n{E['log']} Λόγος: {reason}", color=COLOR_YELLOW)])
@@ -81,7 +81,7 @@ class Moderation(commands.Cog):
     @app_commands.describe(amount="Πόσα (max 100)", reason="Λόγος (υποχρεωτικό)")
     async def clear(self, interaction: discord.Interaction, amount: int, reason: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
         deleted = await interaction.channel.purge(limit=min(amount, 100))
         await send_v2_interaction(interaction, [panel(f"{E['clear']} Διαγράφηκαν **{len(deleted)}** μηνύματα.\n{E['log']} Λόγος: {reason}", color=COLOR_YELLOW)], ephemeral=True)
