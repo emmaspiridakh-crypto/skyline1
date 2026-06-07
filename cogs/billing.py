@@ -47,6 +47,9 @@ class Billing(commands.Cog):
         }
 
         await send_v2_interaction(interaction, [simple(f"{E['check']} Billing panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+
+        # Πρώτα mention ως κανονικό μήνυμα
+        await interaction.channel.send(user.mention)
         await send_v2(interaction.channel, [
             panel_with_buttons(
                 f"## {E['billing']} Billing Panel\n"
@@ -61,7 +64,7 @@ class Billing(commands.Cog):
                 thumbnail_url=THUMBNAIL_URL,
                 color=COLOR_GOLD
             )
-        ], content=user.mention)
+        ])
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
@@ -72,12 +75,16 @@ class Billing(commands.Cog):
             return
 
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [simple(f"{E['error']} Μόνο το staff μπορεί.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [
+                simple(f"{E['error']} Μόνο το staff μπορεί.", color=COLOR_RED)
+            ], ephemeral=True)
             return
 
         data = self.pending.get(cid)
         if not data:
-            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν βρέθηκε η πληρωμή (ίσως έγινε restart).", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [
+                simple(f"{E['error']} Δεν βρέθηκε η πληρωμή (ίσως έγινε restart).", color=COLOR_RED)
+            ], ephemeral=True)
             return
 
         guild  = interaction.guild
@@ -85,7 +92,10 @@ class Billing(commands.Cog):
         seller = guild.get_member(data["seller_id"])
         t      = ts()
 
-        await send_v2_interaction(interaction, [simple(f"{E['check']} Πληρωμή επιβεβαιώθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [
+            simple(f"{E['check']} Πληρωμή επιβεβαιώθηκε!", color=COLOR_GREEN)
+        ], ephemeral=True)
+
         await edit_v2(interaction.message, [panel(
             f"## {E['check']} Πληρωμή Ολοκληρώθηκε!\n"
             f"{E['billing']} Προϊόν: **{data['product']}**\n"
@@ -117,5 +127,3 @@ class Billing(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Billing(bot))
-
-
