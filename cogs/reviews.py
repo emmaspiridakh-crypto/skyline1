@@ -67,7 +67,7 @@ class ReviewModal(discord.ui.Modal, title="Submit Review"):
             )])
 
         await send_v2_interaction(interaction, [
-            panel(f"{E['check']} Το review σου στάλθηκε! Ευχαριστούμε {E['star']}", color=COLOR_GREEN)
+            simple(f"{E['check']} Το review σου στάλθηκε! Ευχαριστούμε {E['star']}", color=COLOR_GREEN)
         ], ephemeral=True)
 
 
@@ -79,13 +79,13 @@ class Reviews(commands.Cog):
     async def setup_reviews(self, interaction: discord.Interaction):
         from config import has_roles
         if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
 
         data = load_reviews()
         avg  = round(data["total_stars"] / data["count"], 1) if data["count"] > 0 else 0
 
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await send_v2(interaction.channel, [
             panel(
                 f"## {E['review']} Reviews\n"
