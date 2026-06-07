@@ -36,7 +36,7 @@ class Billing(commands.Cog):
     @app_commands.describe(user="Ο αγοραστής", amount="Ποσό σε €", product="Τι αγόρασε")
     async def bill(self, interaction: discord.Interaction, user: discord.Member, amount: float, product: str):
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
 
         t   = ts()
@@ -46,7 +46,7 @@ class Billing(commands.Cog):
             "buyer_id": user.id, "seller_id": interaction.user.id,
         }
 
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Billing panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Billing panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await send_v2(interaction.channel, [
             panel_with_buttons(
                 f"## {E['billing']} Billing Panel\n"
@@ -72,12 +72,12 @@ class Billing(commands.Cog):
             return
 
         if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Μόνο το staff μπορεί.", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Μόνο το staff μπορεί.", color=COLOR_RED)], ephemeral=True)
             return
 
         data = self.pending.get(cid)
         if not data:
-            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν βρέθηκε η πληρωμή (ίσως έγινε restart).", color=COLOR_RED)], ephemeral=True)
+            await send_v2_interaction(interaction, [simple(f"{E['error']} Δεν βρέθηκε η πληρωμή (ίσως έγινε restart).", color=COLOR_RED)], ephemeral=True)
             return
 
         guild  = interaction.guild
@@ -85,7 +85,7 @@ class Billing(commands.Cog):
         seller = guild.get_member(data["seller_id"])
         t      = ts()
 
-        await send_v2_interaction(interaction, [panel(f"{E['check']} Πληρωμή επιβεβαιώθηκε!", color=COLOR_GREEN)], ephemeral=True)
+        await send_v2_interaction(interaction, [simple(f"{E['check']} Πληρωμή επιβεβαιώθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await edit_v2(interaction.message, [panel(
             f"## {E['check']} Πληρωμή Ολοκληρώθηκε!\n"
             f"{E['billing']} Προϊόν: **{data['product']}**\n"
@@ -117,4 +117,5 @@ class Billing(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Billing(bot))
+
 
