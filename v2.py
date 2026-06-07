@@ -17,16 +17,15 @@ BUTTON_LINK      = 5
 
 IS_COMPONENTS_V2 = 1 << 15
 
-# ── Colors ───────────────────────────────────────────────────
-COLOR_BLUE   = 0x5865F2  # logs γενικά
-COLOR_GREEN  = 0x57F287  # join, success, check
-COLOR_RED    = 0xED4245  # leave, ban, error
-COLOR_YELLOW = 0xFEE75C  # edit, warn
-COLOR_PURPLE = 0x9B59B6  # role
-COLOR_ORANGE = 0xE67E22  # voice
-COLOR_WHITE  = 0xFFFFFF  # say2, invite
-COLOR_PINK   = 0xEB459E  # boost, donate
-COLOR_GOLD   = 0xF1C40F  # billing, review
+COLOR_BLUE   = 0x5865F2
+COLOR_GREEN  = 0x57F287
+COLOR_RED    = 0xED4245
+COLOR_YELLOW = 0xFEE75C
+COLOR_PURPLE = 0x9B59B6
+COLOR_ORANGE = 0xE67E22
+COLOR_WHITE  = 0xFFFFFF
+COLOR_PINK   = 0xEB459E
+COLOR_GOLD   = 0xF1C40F
 
 
 def text(content: str) -> dict:
@@ -52,8 +51,8 @@ def button(label: str, custom_id: str = None, style: int = BUTTON_PRIMARY,
         b["disabled"] = True
     return b
 
-def action_row(*buttons) -> dict:
-    return {"type": TYPE_ACTION_ROW, "components": list(buttons)}
+def action_row(*btns) -> dict:
+    return {"type": TYPE_ACTION_ROW, "components": list(btns)}
 
 def select_menu(custom_id: str, placeholder: str, options: list) -> dict:
     return {
@@ -76,7 +75,8 @@ def select_option(label: str, value: str, description: str = None, emoji: str = 
             opt["emoji"] = {"name": parts[1], "id": parts[2], "animated": parts[0] == "a"}
     return opt
 
-def section(text_content: str, thumbnail_url: str = None) -> dict:
+def _make_section(text_content: str, thumbnail_url: str = None) -> dict:
+    """Internal section builder."""
     s = {
         "type": TYPE_SECTION,
         "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
@@ -84,44 +84,28 @@ def section(text_content: str, thumbnail_url: str = None) -> dict:
     if thumbnail_url:
         s["accessory"] = {
             "type": TYPE_THUMBNAIL,
-            "media": {"url": thumbnail_url}
+            "media": {"url": thumbnail_url},
+            "description": ""
         }
     return s
 
 def panel(text_content: str, thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
-    """Embed-style panel με χρωματιστή μπάρα αριστερά + thumbnail."""
-    inner = {
-        "type": TYPE_SECTION,
-        "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
-    }
-    if thumbnail_url:
-        inner["accessory"] = {
-            "type": TYPE_THUMBNAIL,
-            "media": {"url": thumbnail_url}
-        }
+    """Embed-style panel με χρωματιστή μπάρα + optional thumbnail."""
+    components = [_make_section(text_content, thumbnail_url)]
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
-        "components": [inner]
+        "components": components
     }
 
 def panel_with_buttons(text_content: str, buttons_row: dict,
                        thumbnail_url: str = None, color: int = COLOR_BLUE) -> dict:
     """Panel με χρώμα + thumbnail + buttons μέσα στο container."""
-    inner = {
-        "type": TYPE_SECTION,
-        "components": [{"type": TYPE_TEXT_DISPLAY, "content": text_content}]
-    }
-    if thumbnail_url:
-        inner["accessory"] = {
-            "type": TYPE_THUMBNAIL,
-            "media": {"url": thumbnail_url}
-        }
     return {
         "type": TYPE_CONTAINER,
         "accent_color": color,
         "components": [
-            inner,
+            _make_section(text_content, thumbnail_url),
             {"type": TYPE_SEPARATOR, "spacing": 1, "divider": True},
             buttons_row
         ]
