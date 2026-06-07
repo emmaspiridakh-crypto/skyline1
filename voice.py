@@ -1,8 +1,7 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 import datetime
-from config import ROLES, CHANNELS, EMOJIS, BANNER_URL, is_staff, has_roles
+from config import ROLES, CHANNELS, EMOJIS
 from v2 import *
 
 E = EMOJIS
@@ -11,119 +10,66 @@ def ts():
     return int(datetime.datetime.now().timestamp())
 
 
-async def send_billing_log(guild, buyer, seller, amount, product, confirmed_by):
-    ch = guild.get_channel(CHANNELS["billing_logs"])
-    if not ch:
-        return
-    await send_v2(ch, [text(
-        f"## {E['billing']} Billing Log\n"
-        f"{E['ticket']} Αγοραστής: {buyer.mention if buyer else 'Unknown'}\n"
-        f"{E['crown']} Πωλητής: {seller.mention if seller else 'Unknown'}\n"
-        f"{E['billing']} Προϊόν: **{product}**\n"
-        f"{E['pay']} Ποσό: **{amount}€**\n"
-        f"{E['check']} Επιβεβαιώθηκε από: {confirmed_by.mention}\n"
-        f"{E['log']} Ώρα: <t:{ts()}:F>"
-    )])
-
-
-class Billing(commands.Cog):
+class Voice(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # store pending bills: custom_id -> {amount, product, buyer_id, seller_id}
-        self.pending = {}
-
-    @app_commands.command(name="bill", description="Στείλε billing panel σε χρήστη")
-    @app_commands.describe(user="Ο αγοραστής", amount="Ποσό σε €", product="Τι αγόρασε")
-    async def bill(self, interaction: discord.Interaction, user: discord.Member, amount: float, product: str):
-        if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
-            return
-
-        t = ts()
-        cid = f"payment_complete_{user.id}_{t}"
-        self.pending[cid] = {
-            "amount": amount,
-            "product": product,
-            "buyer_id": user.id,
-            "seller_id": interaction.user.id,
-        }
-
-        await send_v2_interaction(interaction, [text(f"{E['check']} Billing panel στάλθηκε!")], ephemeral=True)
-        await send_v2(interaction.channel, [
-            banner_container(BANNER_URL),
-            separator(),
-            text(
-                f"## {E['billing']} Billing Panel\n"
-                f"{E['ticket']} Αγοραστής: {user.mention}\n"
-                f"{E['crown']} Πωλητής: {interaction.user.mention}\n"
-                f"{E['billing']} Προϊόν: **{product}**\n"
-                f"{E['pay']} Ποσό: **{amount}€**\n"
-                f"{E['log']} Ημερομηνία: <t:{t}:F>"
-            ),
-            separator(large=True),
-            action_row(
-                button("Payment Complete", custom_id=cid, style=BUTTON_SUCCESS, emoji=E["check"])
-            )
-        ], content=user.mention)
+        self.temp_channels = {}
 
     @commands.Cog.listener()
-    async def on_interaction(self, interaction: discord.Interaction):
-        if interaction.type != discord.InteractionType.component:
-            return
-        cid = interaction.data.get("custom_id", "")
-        if not cid.startswith("payment_complete_"):
-            return
+    async def on_voice_state_update(self, member, before, after):
+        guild = member.guild
+        join_to_create = CHANNELS.get("join_to_create")
+        voice_category = CHANNELS.get("voice_category")
 
-        if not is_staff(interaction.user):
-            await send_v2_interaction(interaction, [
-                text(f"{E['error']} Μόνο το staff μπορεί να πατήσει αυτό.")
-            ], ephemeral=True)
-            return
-
-        data = self.pending.get(cid)
-        if not data:
-            await send_v2_interaction(interaction, [
-                text(f"{E['error']} Δεν βρέθηκε η πληρωμή (ίσως έγινε restart του bot).")
-            ], ephemeral=True)
-            return
-
-        guild  = interaction.guild
-        buyer  = guild.get_member(data["buyer_id"])
-        seller = guild.get_member(data["seller_id"])
-        t = ts()
-
-        await send_v2_interaction(interaction, [
-            text(f"{E['check']} Πληρωμή επιβεβαιώθηκε!")
-        ], ephemeral=True)
-
-        await edit_v2(interaction.message, [
-            banner_container(BANNER_URL),
-            separator(),
-            text(
-                f"## {E['check']} Πληρωμή Ολοκληρώθηκε!\n"
-                f"{E['billing']} Προϊόν: **{data['product']}**\n"
-                f"{E['pay']} Ποσό: **{data['amount']}€**\n"
-                f"{E['ticket']} Αγοραστής: {buyer.mention if buyer else 'Unknown'}\n"
-                f"{E['crown']} Πωλητής: {seller.mention if seller else 'Unknown'}\n"
-                f"{E['log']} Ώρα: <t:{t}:F>\n\n"
-                f"{E['check']} **Επιβεβαιώθηκε από {interaction.user.mention}**"
+        # Create temp channel
+        if after.channel and after.channel.id == join_to_create:
+            category = guild.get_channel(voice_category)
+            new_ch = await guild.create_voice_channel(
+                name=f"{E['voice']} {member.display_name}",
+                category=category,
+                user_limit=10
             )
-        ])
+            self.temp_channels[new_ch.id] = member.id
+            await member.move_to(new_ch)
 
-        await send_billing_log(guild, buyer, seller, data["amount"], data["product"], interaction.user)
+            log_ch = guild.get_channel(CHANNELS["voice_logs"])
+            if log_ch:
+                await send_v2(log_ch, [text(
+                    f"## {E['voice_join']} Temp Voice Δημιουργήθηκε\n"
+                    f"{E['ticket']} Από: {member.mention}\n"
+                    f"{E['voice']} Channel: **{new_ch.name}**\n"
+                    f"{E['loading']} Ώρα: <t:{ts()}:F>"
+                )])
 
-        if buyer:
-            await send_v2_dm(buyer, [text(
-                f"## {E['check']} Επιβεβαίωση Αγοράς\n"
-                f"{E['billing']} Προϊόν: **{data['product']}**\n"
-                f"{E['pay']} Ποσό: **{data['amount']}€**\n"
-                f"{E['crown']} Πωλητής: {seller.display_name if seller else 'Unknown'}\n"
-                f"{E['log']} Ώρα: <t:{t}:F>\n\n"
-                f"Ευχαριστούμε για την αγορά σου! {E['check']}"
-            )])
+            notify_ch = guild.get_channel(CHANNELS["staff_notify"])
+            if notify_ch:
+                staff_r   = guild.get_role(ROLES["staff"])
+                manager_r = guild.get_role(ROLES["manager"])
+                ping = f"{staff_r.mention} {manager_r.mention}" if staff_r and manager_r else ""
+                await send_v2(notify_ch, [text(
+                    f"{E['voice']} **{member.mention}** μπήκε σε Support Voice!\n"
+                    f"Channel: **{new_ch.name}**"
+                )], content=ping)
 
-        del self.pending[cid]
+        # Delete temp channel when empty
+        if before.channel and before.channel.id in self.temp_channels:
+            if len(before.channel.members) == 0:
+                ch_name = before.channel.name
+                del self.temp_channels[before.channel.id]
+                try:
+                    await before.channel.delete()
+                except:
+                    pass
+
+                log_ch = guild.get_channel(CHANNELS["voice_logs"])
+                if log_ch:
+                    await send_v2(log_ch, [text(
+                        f"## {E['voice_leave']} Temp Voice Διαγράφηκε\n"
+                        f"{E['voice']} Channel: **{ch_name}**\n"
+                        f"{E['loading']} Ώρα: <t:{ts()}:F>"
+                    )])
 
 
 async def setup(bot):
-    await bot.add_cog(Billing(bot))
+    await bot.add_cog(Voice(bot))
+
