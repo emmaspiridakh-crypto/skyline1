@@ -55,20 +55,19 @@ class ReviewModal(discord.ui.Modal, title="Submit Review"):
 
         reviews_ch = self.guild.get_channel(CHANNELS["reviews"])
         if reviews_ch:
-            await send_v2(reviews_ch, [
-                section(
-                    f"## {E['review']} Review #{data['count']}\n"
-                    f"{E['star']} Βαθμολογία: **{star_display}** ({stars}/5)\n"
-                    f"{E['ticket']} Από: {user.mention}\n"
-                    f"{E['log']} Ώρα: <t:{t}:F>\n\n"
-                    f"**Σχόλιο:**\n{comment}\n\n"
-                    f"{E['loading']} Μέσος όρος: **{avg}/5** από **{data['count']}** reviews",
-                    thumbnail_url=THUMBNAIL_URL
-                )
-            ])
+            await send_v2(reviews_ch, [panel(
+                f"## {E['review']} Review #{data['count']}\n"
+                f"{E['star']} Βαθμολογία: **{star_display}** ({stars}/5)\n"
+                f"{E['ticket']} Από: {user.mention}\n"
+                f"{E['log']} Ώρα: <t:{t}:F>\n\n"
+                f"**Σχόλιο:**\n{comment}\n\n"
+                f"{E['loading']} Μέσος όρος: **{avg}/5** από **{data['count']}** reviews",
+                thumbnail_url=THUMBNAIL_URL,
+                color=COLOR_GOLD
+            )])
 
         await send_v2_interaction(interaction, [
-            text(f"{E['check']} Το review σου στάλθηκε! Ευχαριστούμε {E['star']}")
+            panel(f"{E['check']} Το review σου στάλθηκε! Ευχαριστούμε {E['star']}", color=COLOR_GREEN)
         ], ephemeral=True)
 
 
@@ -80,28 +79,28 @@ class Reviews(commands.Cog):
     async def setup_reviews(self, interaction: discord.Interaction):
         from config import has_roles
         if not has_roles(interaction.user, ["ceo", "owner", "co_owner"]):
-            await send_v2_interaction(interaction, [text(f"{E['error']} Δεν έχεις δικαίωμα.")], ephemeral=True)
+            await send_v2_interaction(interaction, [panel(f"{E['error']} Δεν έχεις δικαίωμα.", color=COLOR_RED)], ephemeral=True)
             return
 
         data = load_reviews()
         avg  = round(data["total_stars"] / data["count"], 1) if data["count"] > 0 else 0
 
-        await send_v2_interaction(interaction, [text(f"{E['check']} Panel στάλθηκε!")], ephemeral=True)
+        await send_v2_interaction(interaction, [panel(f"{E['check']} Panel στάλθηκε!", color=COLOR_GREEN)], ephemeral=True)
         await send_v2(interaction.channel, [
-            section(
+            panel(
                 f"## {E['review']} Reviews\n"
                 f"Μοιράσου την εμπειρία σου μαζί μας!\n\n"
                 f"{E['star']} Συνολικά reviews: **{data['count']}**\n"
                 f"{E['loading']} Μέσος όρος: **{avg}/5**\n\n"
                 f"Επέλεξε αστέρια παρακάτω.",
-                thumbnail_url=THUMBNAIL_URL
+                thumbnail_url=BANNER_URL,
+                color=COLOR_GOLD
             ),
-            separator(large=True),
             action_row(
-                button("⭐",     custom_id="review_1", style=BUTTON_SECONDARY),
-                button("⭐⭐",   custom_id="review_2", style=BUTTON_SECONDARY),
-                button("⭐⭐⭐", custom_id="review_3", style=BUTTON_SECONDARY),
-                button("⭐⭐⭐⭐",custom_id="review_4", style=BUTTON_SECONDARY),
+                button("⭐",      custom_id="review_1", style=BUTTON_SECONDARY),
+                button("⭐⭐",    custom_id="review_2", style=BUTTON_SECONDARY),
+                button("⭐⭐⭐",  custom_id="review_3", style=BUTTON_SECONDARY),
+                button("⭐⭐⭐⭐", custom_id="review_4", style=BUTTON_SECONDARY),
             ),
             action_row(
                 button("⭐⭐⭐⭐⭐", custom_id="review_5", style=BUTTON_SUCCESS),
